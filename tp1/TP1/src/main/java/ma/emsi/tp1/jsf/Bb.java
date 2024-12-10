@@ -12,51 +12,22 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * Backing bean pour la page JSF index.xhtml.
- * Portée view pour conserver l'état de la conversation pendant plusieurs requêtes HTTP.
- */
 @Named
 @ViewScoped
 public class Bb implements Serializable {
 
-    /**
-     * Rôle "système" que l'on attribuera plus tard à un LLM.
-     * Valeur par défaut que l'utilisateur peut modifier.
-     * Possible d'ajouter de nouveaux rôles dans la méthode getSystemRoles.
-     */
     private String systemRole = "helpful assistant";
-
-    /**
-     * Quand le rôle est choisi par l'utilisateur dans la liste déroulante,
-     * il n'est plus possible de le modifier (voir code de la page JSF).
-     */
     private boolean systemRoleChangeable = true;
+    private boolean debugMode = false;
 
-    /**
-     * Dernière question posée par l'utilisateur.
-     */
     private String question;
-
-    /**
-     * Dernière réponse du serveur.
-     */
     private String reponse;
 
-    /**
-     * La conversation depuis le début.
-     */
     private StringBuilder conversation = new StringBuilder();
 
-    /**
-     * Contexte JSF. Utilisé pour qu'un message d'erreur s'affiche dans le formulaire.
-     */
     @Inject
     private FacesContext facesContext;
 
-    /**
-     * Obligatoire pour un bean CDI (classe gérée par CDI).
-     */
     public Bb() {
     }
 
@@ -97,12 +68,11 @@ public class Bb implements Serializable {
         this.conversation = new StringBuilder(conversation);
     }
 
-    /**
-     * Envoie la question au serveur.
-     * Traitement : met en évidence les mots longs (plus de 6 caractères) en les entourant d'astérisques.
-     *
-     * @return null pour rester sur la même page.
-     */
+    public boolean isDebugMode() {
+        return debugMode;
+    }
+
+    // Méthode principale pour traiter la question
     public String envoyer() {
         if (question == null || question.isBlank()) {
             FacesMessage message = new FacesMessage(FacesMessage.SEVERITY_ERROR,
@@ -125,10 +95,10 @@ public class Bb implements Serializable {
             }
         }
 
-        // Ajouter le rôle de l'API en début de réponse
+        // Ajout du rôle de l'API en début de réponse
         this.reponse += "Rôle : " + systemRole.toUpperCase(Locale.FRENCH) + "\n";
 
-        // Ajouter les mots longs
+        // Ajout des mots longs
         if (!motsLongs.isEmpty()) {
             this.reponse += "Mots longs détectés :\n" + String.join(" ", motsLongs) + "\n";
             this.reponse += "Total : " + motsLongs.size() + " mot(s) long(s).\n";
@@ -138,6 +108,12 @@ public class Bb implements Serializable {
 
         // Afficher la conversation dans l'historique
         afficherConversation();
+
+        // Si mode debug activé, afficher les logs
+        if (debugMode) {
+            System.out.println("DEBUG: Question traitée: " + question);
+            System.out.println("DEBUG: Réponse générée: " + reponse);
+        }
         return null;
     }
 
@@ -146,6 +122,10 @@ public class Bb implements Serializable {
      * @return "index" pour recommencer une nouvelle conversation.
      */
     public String nouveauChat() {
+        this.question = null;
+        this.reponse = null;
+        this.conversation = new StringBuilder();
+        this.systemRoleChangeable = true;
         return "index";
     }
 
@@ -155,6 +135,15 @@ public class Bb implements Serializable {
     private void afficherConversation() {
         this.conversation.append("* Utilisateur:\n").append(question)
                 .append("\n* Serveur:\n").append(reponse).append("\n");
+    }
+
+    /**
+     * Permet de changer l'état du mode debug.
+     */
+    public void toggleDebug() {
+        this.debugMode = !this.debugMode;
+        String message = debugMode ? "Mode debug activé" : "Mode debug désactivé";
+        facesContext.addMessage(null, new FacesMessage(FacesMessage.SEVERITY_INFO, message, null));
     }
 
     /**
