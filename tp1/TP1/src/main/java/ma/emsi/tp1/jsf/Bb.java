@@ -6,32 +6,104 @@ import jakarta.faces.model.SelectItem;
 import jakarta.faces.view.ViewScoped;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
+import ma.emsi.tp1.llm.JsonUtilPourGemini;
+import ma.emsi.tp1.llm.LlmInteraction;
 
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * Backing bean pour la gestion de la page JSF.
+ * Portée view pour conserver l'état de la conversation entre plusieurs requêtes HTTP.
+ */
 @Named
 @ViewScoped
 public class Bb implements Serializable {
 
+    /**
+     * Rôle "système" attribué à un LLM.
+     * Peut être modifié par l'utilisateur via l'interface.
+     * De nouveaux rôles peuvent être ajoutés dans la méthode getSystemRoles.
+     */
     private String systemRole = "helpful assistant";
-    private boolean systemRoleChangeable = true;
-    private boolean debugMode = false;
 
+    /**
+     * Indique si le rôle système peut encore être modifié.
+     */
+    private boolean systemRoleChangeable = true;
+
+    /**
+     * Dernière question posée par l'utilisateur.
+     */
     private String question;
+
+    /**
+     * Dernière réponse reçue de l'API LLM.
+     */
     private String reponse;
 
+    /**
+     * Historique complet de la conversation.
+     */
     private StringBuilder conversation = new StringBuilder();
+
+    /**
+     * JSON de la requête envoyée.
+     */
+    private String texteRequeteJson;
+
+    /**
+     * JSON de la réponse reçue.
+     */
+    private String texteReponseJson;
+
+    /**
+     * Mode debug pour afficher les détails techniques.
+     */
+    private boolean debug;
+
+    // Getters et setters pour les nouvelles propriétés
+    public String getTexteRequeteJson() {
+        return texteRequeteJson;
+    }
+
+    public void setTexteRequeteJson(String texteRequeteJson) {
+        this.texteRequeteJson = texteRequeteJson;
+    }
+
+    public String getTexteReponseJson() {
+        return texteReponseJson;
+    }
+
+    public void setTexteReponseJson(String texteReponseJson) {
+        this.texteReponseJson = texteReponseJson;
+    }
+
+    public boolean isDebug() {
+        return debug;
+    }
+
+    public void setDebug(boolean debug) {
+        this.debug = debug;
+    }
+
+    // Méthode pour basculer le mode debug
+    public String toggleDebug() {
+        this.debug = !this.debug;
+        return null; // Rester sur la même page
+    }
 
     @Inject
     private FacesContext facesContext;
 
+    /**
+     * Constructeur par défaut requis pour un bean CDI.
+     */
     public Bb() {
     }
 
-    // Getters et setters
     public String getSystemRole() {
         return systemRole;
     }
@@ -56,6 +128,11 @@ public class Bb implements Serializable {
         return reponse;
     }
 
+    /**
+     * Setter utilisé pour l'affichage de la réponse dans le textarea.
+     *
+     * @param reponse la réponse obtenue.
+     */
     public void setReponse(String reponse) {
         this.reponse = reponse;
     }
@@ -68,102 +145,83 @@ public class Bb implements Serializable {
         this.conversation = new StringBuilder(conversation);
     }
 
-    public boolean isDebugMode() {
-        return debugMode;
-    }
-
-    // Méthode principale pour traiter la question
+    /**
+     * Envoie une question au serveur et traite la réponse.
+     * Le serveur effectue un traitement simple en attendant d'intégrer une interaction complète avec un LLM.
+     *
+     * @return null pour rester sur la même page.
+     */
     public String envoyer() {
         if (question == null || question.isBlank()) {
             FacesMessage message = new FacesMessage(FacesMessage.SEVERITY_ERROR,
-                    "Texte question vide", "Il manque le texte de la question");
+                    "Texte question vide", "Veuillez saisir une question.");
             facesContext.addMessage(null, message);
             return null;
         }
-
-        // Initialisation de la réponse
-        this.reponse = "";
-        this.systemRoleChangeable = false;
-
-        // Traitement : trouver les mots longs (plus de 6 caractères)
-        String[] tokens = question.split(" ");
-        List<String> motsLongs = new ArrayList<>();
-
-        for (String token : tokens) {
-            if (token.length() > 6) {
-                motsLongs.add("***" + token.toUpperCase(Locale.FRENCH) + "***");
-            }
+        try {
+            // Appel à JsonUtil pour gérer l'interaction avec le LLM
+            JsonUtilPourGemini jsonUtil = new JsonUtilPourGemini();
+            LlmInteraction interaction = jsonUtil.envoyerRequete(question);
+            this.reponse = interaction.texteReponse();
+            this.texteRequeteJson = interaction.texteRequeteJson();
+            this.texteReponseJson = interaction.texteReponseJson();
+        } catch (Exception e) {
+            e.printStackTrace();
+            FacesMessage message = new FacesMessage(FacesMessage.SEVERITY_ERROR,
+                    "Problème de connexion avec l'API du LLM",
+                    "Erreur rencontrée : " + e.getMessage());
+            facesContext.addMessage(null, message);
+            return null;
         }
-
-        // Ajout du rôle de l'API en début de réponse
-        this.reponse += "Rôle : " + systemRole.toUpperCase(Locale.FRENCH) + "\n";
-
-        // Ajout des mots longs
-        if (!motsLongs.isEmpty()) {
-            this.reponse += "Mots longs détectés :\n" + String.join(" ", motsLongs) + "\n";
-            this.reponse += "Total : " + motsLongs.size() + " mot(s) long(s).\n";
-        } else {
-            this.reponse += "Aucun mot long détecté dans votre question.\n";
+        // Mise à jour de l'historique de la conversation
+        if (this.conversation.isEmpty()) {
+            this.reponse = systemRole.toUpperCase(Locale.FRENCH) + "\n" + this.reponse;
+            this.systemRoleChangeable = false;
         }
-
-        // Afficher la conversation dans l'historique
         afficherConversation();
-
-        // Si mode debug activé, afficher les logs
-        if (debugMode) {
-            System.out.println("DEBUG: Question traitée: " + question);
-            System.out.println("DEBUG: Réponse générée: " + reponse);
-        }
         return null;
     }
 
     /**
-     * Pour un nouveau chat.
-     * @return "index" pour recommencer une nouvelle conversation.
+     * Réinitialise le chat en redirigeant vers la page index.xhtml.
+     * Cette opération crée une nouvelle instance du backing bean.
+     *
+     * @return "index" pour recharger la vue.
      */
     public String nouveauChat() {
-        this.question = null;
-        this.reponse = null;
-        this.conversation = new StringBuilder();
-        this.systemRoleChangeable = true;
         return "index";
     }
 
     /**
-     * Pour afficher la conversation dans le textArea de la page JSF.
+     * Met à jour l'affichage de la conversation dans le textarea.
      */
     private void afficherConversation() {
-        this.conversation.append("* Utilisateur:\n").append(question)
-                .append("\n* Serveur:\n").append(reponse).append("\n");
+        this.conversation.append("* Utilisateur:\n").append(question).append("\n* Serveur:\n").append(reponse).append("\n");
     }
 
     /**
-     * Permet de changer l'état du mode debug.
-     */
-    public void toggleDebug() {
-        this.debugMode = !this.debugMode;
-        String message = debugMode ? "Mode debug activé" : "Mode debug désactivé";
-        facesContext.addMessage(null, new FacesMessage(FacesMessage.SEVERITY_INFO, message, null));
-    }
-
-    /**
-     * Retourne la liste des rôles systèmes disponibles.
-     * @return liste des rôles systèmes.
+     * Fournit une liste de rôles système disponibles pour l'interaction avec le LLM.
+     *
+     * @return Liste des rôles sous forme d'objets SelectItem.
      */
     public List<SelectItem> getSystemRoles() {
         List<SelectItem> listeSystemRoles = new ArrayList<>();
+        // Rôle pour la traduction anglais-français
         String role = """
-                You are an interpreter. You translate from English to French and from French to English.
-                If the user type a French text, you translate it into English.
-                If the user type an English text, you translate it into French.
-                If the text contains only one to three words, give some examples of usage of these words in English.
+                Vous êtes un interprète. Vous traduisez de l'anglais vers le français et inversement.
+                Si l'utilisateur saisit un texte en français, vous le traduisez en anglais.
+                Si le texte est en anglais, vous le traduisez en français.
+                Pour un texte de un à trois mots, fournissez des exemples d'utilisation.
                 """;
         listeSystemRoles.add(new SelectItem(role, "Traducteur Anglais-Français"));
+
+        // Rôle pour la suggestion de lieux touristiques
         role = """
-                You are a travel guide. If the user types the name of a country or town,
-                you tell them the main places to visit and the average price of a meal.
+                Vous êtes un guide touristique. Si l'utilisateur saisit le nom d'un pays ou d'une ville,
+                vous indiquez les principaux lieux à visiter et le prix moyen d'un repas.
                 """;
         listeSystemRoles.add(new SelectItem(role, "Guide touristique"));
+
         return listeSystemRoles;
     }
 }
