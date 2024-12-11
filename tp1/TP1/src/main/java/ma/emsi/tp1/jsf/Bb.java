@@ -208,12 +208,11 @@ public class Bb implements Serializable {
         List<SelectItem> listeSystemRoles = new ArrayList<>();
         // Rôle pour la traduction anglais-français
         String role = """
-                Vous êtes un interprète. Vous traduisez de l'anglais vers le français et inversement.
-                Si l'utilisateur saisit un texte en français, vous le traduisez en anglais.
-                Si le texte est en anglais, vous le traduisez en français.
-                Pour un texte de un à trois mots, fournissez des exemples d'utilisation.
+                Vous êtes un psychologue. Vous aidez les personnes à comprendre 
+                leurs émotions et à gérer leurs sentiments. Vous pouvez leur poser des questions
+                pour mieux comprendre leur situation et leur donner des conseils.
                 """;
-        listeSystemRoles.add(new SelectItem(role, "Traducteur Anglais-Français"));
+        listeSystemRoles.add(new SelectItem(role, "Psychologue"));
 
         // Rôle pour la suggestion de lieux touristiques
         role = """
