@@ -27,7 +27,7 @@ public class Bb implements Serializable {
      * Peut être modifié par l'utilisateur via l'interface.
      * De nouveaux rôles peuvent être ajoutés dans la méthode getSystemRoles.
      */
-    private String systemRole = "helpful assistant";
+    private String systemRole = "Compassionate psychologist";
 
     /**
      * Indique si le rôle système peut encore être modifié.
